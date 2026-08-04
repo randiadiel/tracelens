@@ -65,14 +65,20 @@ export async function startHttpServer(
 
   app.post("/ingest/:source", authenticate, async (req, res) => {
     try {
+      const source = Array.isArray(req.params.source)
+        ? req.params.source[0]
+        : req.params.source;
+      if (!source) {
+        throw new Error("A source name is required.");
+      }
       const parsed = ingestionSchema.parse(req.body);
       const logs: LogInput[] = Array.isArray(parsed)
         ? parsed
         : "logs" in parsed
           ? parsed.logs
           : [parsed];
-      const appended = await store.append(req.params.source ?? "", logs);
-      res.status(202).json({ source: req.params.source, appended });
+      const appended = await store.append(source, logs);
+      res.status(202).json({ source, appended });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       res.status(400).json({ error: message });
