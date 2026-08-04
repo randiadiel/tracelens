@@ -80,6 +80,8 @@ Send `Authorization: Bearer replace-me` to both `/mcp` and `/ingest/:source`.
   and applies a character budget.
 - `search_logs` — searches recent logs and returns compressed context around
   the newest matches.
+- `analyze_performance` — extracts timing and resource metrics, groups similar
+  operations, and ranks p95 latency, total-time bottlenecks, and slow outliers.
 
 Use exactly one of `source` or `path` with inspection tools.
 
@@ -97,6 +99,32 @@ context and reports how many lines were omitted.
 
 Loop detection is evidence, not proof that a process is stuck. The response
 labels confidence and includes the repeated pattern so the agent can decide.
+
+## Performance debugging
+
+`analyze_performance` recognizes common timing fields such as `duration`,
+`duration_ms`, `elapsed`, `latency`, and messages like `completed in 120ms`.
+It also recognizes `cpu_percent`, `memory_mb`, `rss`, `heap_used`, and
+`event_loop_lag`.
+
+Include an operation, route, endpoint, span, task, or job name so samples group
+cleanly:
+
+```json
+{
+  "message": "request completed",
+  "metadata": {
+    "operation": "GET /api/users/:id",
+    "duration_ms": 842,
+    "cpu_percent": 74,
+    "memory_mb": 512
+  }
+}
+```
+
+The result distinguishes the highest tail latency from the operation consuming
+the most total observed time. It does not claim causation from correlation; the
+returned slow lines and resource peaks give the agent evidence for follow-up.
 
 ## Configuration
 

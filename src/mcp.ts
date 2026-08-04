@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { analyzeLines } from "./analyze.js";
 import { normalizeLine } from "./normalize.js";
+import { analyzePerformance } from "./performance.js";
 import { readTail } from "./read.js";
 import { LogStore } from "./store.js";
 import type { LogInput, ReadResult } from "./types.js";
@@ -190,6 +191,41 @@ export function createTraceLensServer(store = new LogStore()): McpServer {
             ...new Set(selectedMatches.map(({ line }) => normalizeLine(line.text))),
           ].slice(0, 20),
           context: analysis,
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "analyze_performance",
+    {
+      title: "Analyze performance bottlenecks",
+      description:
+        "Extract latency, CPU, memory, and event-loop metrics from recent logs. Groups operations, ranks p95 and total-time bottlenecks, and returns only the slowest outliers.",
+      inputSchema: {
+        source: z.string().min(1).max(80).optional(),
+        path: z.string().min(1).max(4_096).optional(),
+        tailLines: z.number().int().min(10).max(100_000).default(20_000),
+        slowThresholdMs: z.number().min(0.01).max(3_600_000).default(500),
+        maxOperations: z.number().int().min(1).max(50).default(10),
+        maxOutliers: z.number().int().min(1).max(50).default(10),
+        maxChars: z.number().int().min(2_000).max(30_000).default(12_000),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    async (input) => {
+      try {
+        const read = await readTarget(store, input);
+        const analysis = analyzePerformance(read.source, read.lines, input);
+        return jsonResult({
+          ...analysis,
+          read: {
+            totalBytes: read.totalBytes,
+            bytesRead: read.bytesRead,
+            truncatedAtStart: read.truncatedAtStart,
+          },
         });
       } catch (error) {
         return errorResult(error);
