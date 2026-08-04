@@ -163,6 +163,62 @@ function fitToBudget(
   };
 }
 
+function enforceSerializedBudget(
+  result: AnalysisResult,
+  maxChars: number,
+): AnalysisResult {
+  while (JSON.stringify(result).length > maxChars && result.entries.length > 1) {
+    const removed = result.entries.shift();
+    if (!removed) {
+      break;
+    }
+    const removedLines = removed.toLine - removed.fromLine + 1;
+    result.summary.linesReturned -= removedLines;
+    result.summary.entriesReturned -= 1;
+    result.summary.omittedLines += removedLines;
+    result.summary.outputTruncated = true;
+  }
+
+  let patternTruncated = false;
+  while (
+    JSON.stringify(result).length > maxChars &&
+    (result.loop.pattern?.length ?? 0) > 1
+  ) {
+    result.loop.pattern?.pop();
+    patternTruncated = true;
+  }
+  if (patternTruncated) {
+    result.loop.message = `${result.loop.message ?? "Loop detected"} Pattern sample truncated.`;
+  }
+
+  const lastEntry = result.entries.at(-1);
+  if (
+    JSON.stringify(result).length > maxChars &&
+    lastEntry?.line &&
+    lastEntry.line.length > 120
+  ) {
+    lastEntry.line = clampLine(lastEntry.line, 120);
+  }
+  const loopSample = result.loop.pattern?.[0];
+  if (
+    JSON.stringify(result).length > maxChars &&
+    loopSample &&
+    loopSample.length > 120 &&
+    result.loop.pattern
+  ) {
+    result.loop.pattern[0] = clampLine(loopSample, 120);
+  }
+  if (JSON.stringify(result).length > maxChars && result.source.length > 120) {
+    result.source = `…${result.source.slice(-119)}`;
+  }
+
+  result.summary.repeatedLinesCollapsed = Math.max(
+    0,
+    result.summary.linesReturned - result.summary.entriesReturned,
+  );
+  return result;
+}
+
 export function analyzeLines(
   source: string,
   lines: NumberedLine[],
@@ -220,7 +276,6 @@ export function analyzeLines(
           kind: "cycle",
           fromLine: first.number,
           toLine: last.number,
-          pattern: rawPattern,
           occurrences: cycle.occurrences,
         },
       ];
@@ -252,7 +307,7 @@ export function analyzeLines(
     0,
   );
 
-  return {
+  const result: AnalysisResult = {
     source,
     summary: {
       linesRead: lines.length,
@@ -265,6 +320,7 @@ export function analyzeLines(
     loop,
     entries: fitted.entries,
   };
+  return enforceSerializedBudget(result, maxChars);
 }
 
 function stripForComparison(value: string): string {

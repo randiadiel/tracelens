@@ -94,7 +94,7 @@ export function createTraceLensServer(store = new LogStore()): McpServer {
         "Read the tail of an ingested source or allowed local file. Collapses repeated lines and trailing cycles, reports likely infinite loops, and enforces a response budget.",
       inputSchema: {
         source: z.string().min(1).max(80).optional(),
-        path: z.string().min(1).optional(),
+        path: z.string().min(1).max(4_096).optional(),
         tailLines: z.number().int().min(10).max(100_000).default(5_000),
         maxChars: z.number().int().min(1_000).max(30_000).default(12_000),
         maxLineChars: z.number().int().min(100).max(2_000).default(600),
@@ -136,7 +136,7 @@ export function createTraceLensServer(store = new LogStore()): McpServer {
         "Search recent logs and return compact context around the newest matches. Repeated matching context is collapsed before it reaches the model.",
       inputSchema: {
         source: z.string().min(1).max(80).optional(),
-        path: z.string().min(1).optional(),
+        path: z.string().min(1).max(4_096).optional(),
         query: z.string().min(1).max(1_000),
         regex: z.boolean().default(false),
         caseSensitive: z.boolean().default(false),

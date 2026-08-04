@@ -83,4 +83,21 @@ describe("analyzeLines", () => {
     expect(result.summary.omittedLines).toBeGreaterThan(0);
     expect(result.entries.at(-1)?.toLine).toBe(100);
   });
+
+  it("bounds a long repeating pattern to the requested budget", () => {
+    const pattern = Array.from(
+      { length: 20 },
+      (_, index) => `cycle step ${index} ${"details ".repeat(80)}`,
+    );
+    const result = analyzeLines("verbose-worker", numbered([...pattern, ...pattern, ...pattern]), {
+      maxChars: 1_000,
+      maxLineChars: 2_000,
+      minLoopOccurrences: 3,
+      maxPatternLength: 20,
+    });
+
+    expect(result.loop.detected).toBe(true);
+    expect(result.loop.message).toContain("Pattern sample truncated");
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(1_000);
+  });
 });

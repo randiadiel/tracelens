@@ -90,10 +90,10 @@ normalizes volatile timestamps, UUIDs, and named counters before comparing
 lines, while keeping the first original line as the sample. A repeated cycle is
 returned once with its pattern, occurrence count, and covered line range.
 
-Responses default to a 12,000-character budget and never exceed the
-tool-configured 30,000-character ceiling. If unique logs still exceed the
-budget, TraceLens keeps the newest context and reports how many lines were
-omitted.
+The analyzed log payload defaults to a 12,000-character budget with a
+tool-configured 30,000-character ceiling. Small read metadata is added outside
+that budget. If unique logs still exceed the budget, TraceLens keeps the newest
+context and reports how many lines were omitted.
 
 Loop detection is evidence, not proof that a process is stuck. The response
 labels confidence and includes the repeated pattern so the agent can decide.
