@@ -49,7 +49,7 @@ export function createTraceLensServer(
   const server = new McpServer(
     {
       name: "tracelens",
-      version: "0.0.1",
+      version: "0.0.2",
     },
     {
       instructions: TRACE_LENS_INSTRUCTIONS,

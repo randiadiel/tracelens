@@ -2,7 +2,7 @@ import { configuredRoots } from "./read.js";
 import type { LogStore } from "./store.js";
 import type { TraceLensServerContext, TraceLensServerInfo } from "./types.js";
 
-const VERSION = "0.0.1";
+const VERSION = "0.0.2";
 
 const TOOL_GUIDES = [
   {
