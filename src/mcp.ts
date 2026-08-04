@@ -1,11 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { analyzeLines } from "./analyze.js";
+import { buildTraceLensInfo, TRACE_LENS_INSTRUCTIONS } from "./info.js";
 import { normalizeLine } from "./normalize.js";
 import { analyzePerformance } from "./performance.js";
 import { readTail } from "./read.js";
 import { LogStore } from "./store.js";
-import type { LogInput, ReadResult } from "./types.js";
+import type { LogInput, ReadResult, TraceLensServerContext } from "./types.js";
 
 const levelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 const logSchema = z.object({
@@ -41,11 +42,37 @@ async function readTarget(
     : readTail(input.path as string, input.tailLines);
 }
 
-export function createTraceLensServer(store = new LogStore()): McpServer {
-  const server = new McpServer({
-    name: "tracelens",
-    version: "0.0.1",
-  });
+export function createTraceLensServer(
+  store = new LogStore(),
+  context: TraceLensServerContext = { transport: "stdio" },
+): McpServer {
+  const server = new McpServer(
+    {
+      name: "tracelens",
+      version: "0.0.2",
+    },
+    {
+      instructions: TRACE_LENS_INSTRUCTIONS,
+    },
+  );
+
+  server.registerTool(
+    "tracelens_info",
+    {
+      title: "TraceLens server info",
+      description:
+        "How to use TraceLens and where to push logs. Returns ingest endpoints, storage paths, available sources, tool guide, and workflow. Call first when unsure.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    async () => {
+      try {
+        return jsonResult(await buildTraceLensInfo(store, context));
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
 
   server.registerTool(
     "list_log_sources",

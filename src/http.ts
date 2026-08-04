@@ -86,7 +86,12 @@ export async function startHttpServer(
   });
 
   app.post("/mcp", authenticate, async (req, res) => {
-    const mcp = createTraceLensServer(store);
+    const mcp = createTraceLensServer(store, {
+      transport: "http",
+      host,
+      port,
+      authRequired: Boolean(token),
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
