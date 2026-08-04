@@ -1,5 +1,5 @@
 {
-  "name": "tracelens",
+  "name": "@randiadiel/tracelens",
   "version": "0.0.1",
   "description": "Context-efficient local log inspection over MCP",
   "type": "module",
@@ -46,5 +46,9 @@
     "tsx": "^4.23.5",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

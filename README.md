@@ -20,6 +20,12 @@ npm install
 npm run build
 ```
 
+Once published, run it without installing:
+
+```bash
+npx -y @randiadiel/tracelens@latest
+```
+
 ## Run as a local stdio MCP server
 
 Add this server to any MCP client:
@@ -28,8 +34,8 @@ Add this server to any MCP client:
 {
   "mcpServers": {
     "tracelens": {
-      "command": "node",
-      "args": ["/absolute/path/to/tracelens/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@randiadiel/tracelens@latest"],
       "env": {
         "TRACELENS_ALLOWED_ROOTS": "/path/to/project,/var/log/my-app"
       }
@@ -133,6 +139,30 @@ returned slow lines and resource peaks give the agent evidence for follow-up.
 | `TRACELENS_ALLOWED_ROOTS` | Comma-separated roots available to file inspection |
 | `TRACELENS_DATA_DIR` | Directory for ingested JSONL logs |
 | `TRACELENS_TOKEN` | Optional localhost HTTP token; required off-loopback |
+
+## Publishing
+
+The `publish.yml` GitHub Actions workflow runs after every merge to `main`. It
+tests and builds the package, then publishes only when the version in
+`package.json` does not already exist on npm.
+
+Before the first merge:
+
+1. Ensure the `randiadiel` npm account or organization owns the
+   `@randiadiel` scope.
+2. Create an npm granular access token that can publish packages in that scope.
+3. Add it as the `NPM_TOKEN` Actions secret in the GitHub repository.
+
+Each release must change the version:
+
+```bash
+npm version patch --no-git-tag-version
+```
+
+After the initial publish, configure npm trusted publishing for GitHub user
+`randiadiel`, repository `tracelens`, workflow `publish.yml`, with
+`npm publish` allowed. The workflow already has OIDC permission, so the
+long-lived `NPM_TOKEN` secret can then be removed.
 
 ```bash
 npm test
