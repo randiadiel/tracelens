@@ -1,0 +1,54 @@
+{
+  "name": "@randiadiel/tracelens",
+  "version": "0.0.1",
+  "description": "Context-efficient local log inspection over MCP",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "tracelens": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/randiadiel/tracelens.git"
+  },
+  "keywords": [
+    "mcp",
+    "logs",
+    "debugging",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/randiadiel/tracelens/issues"
+  },
+  "homepage": "https://github.com/randiadiel/tracelens#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.5",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
