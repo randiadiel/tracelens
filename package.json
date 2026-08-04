@@ -1,6 +1,6 @@
 {
   "name": "tracelens",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Context-efficient local log inspection over MCP",
   "type": "module",
   "main": "dist/index.js",

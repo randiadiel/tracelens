@@ -44,7 +44,7 @@ async function readTarget(
 export function createTraceLensServer(store = new LogStore()): McpServer {
   const server = new McpServer({
     name: "tracelens",
-    version: "1.0.0",
+    version: "0.0.1",
   });
 
   server.registerTool(
