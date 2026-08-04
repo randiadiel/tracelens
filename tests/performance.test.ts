@@ -28,7 +28,7 @@ describe("analyzePerformance", () => {
     expect(result.bottlenecks[0]).toMatchObject({
       operation: "POST /orders",
       maxMs: 2_000,
-      severity: "slow",
+      severity: "critical",
     });
     expect(result.bottlenecks.find((entry) => entry.operation === "GET /users/:id")).toMatchObject({
       samples: 3,
