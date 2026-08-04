@@ -72,7 +72,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const server = createTraceLensServer();
+  const server = createTraceLensServer(undefined, { transport: "stdio" });
   await server.connect(new StdioServerTransport());
 }
 

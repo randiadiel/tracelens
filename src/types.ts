@@ -55,3 +55,53 @@ export interface AnalysisResult {
   loop: LoopFinding;
   entries: CompactEntry[];
 }
+
+export interface TraceLensServerContext {
+  transport: "stdio" | "http";
+  host?: string;
+  port?: number;
+  authRequired?: boolean;
+}
+
+export interface TraceLensToolGuide {
+  name: string;
+  summary: string;
+}
+
+export interface TraceLensServerInfo {
+  service: "tracelens";
+  version: string;
+  transport: "stdio" | "http";
+  workflow: string[];
+  tools: TraceLensToolGuide[];
+  ingest: {
+    mcpTool: string;
+    httpUrlTemplate: string | null;
+    httpExample: string | null;
+    authHeader: string | null;
+    logFormat: {
+      message: string;
+      level?: LogLevel;
+      timestamp?: string;
+      metadata?: Record<string, unknown>;
+    };
+    batchFormats: string[];
+  };
+  endpoints: {
+    mcp: string | null;
+    health: string | null;
+  };
+  storage: {
+    dataDir: string;
+    sources: Array<{ name: string; bytes: number; updatedAt: string }>;
+  };
+  fileInspection: {
+    allowedRoots: string[];
+    note: string;
+  };
+  environment: {
+    TRACELENS_ALLOWED_ROOTS: string | null;
+    TRACELENS_DATA_DIR: string | null;
+    TRACELENS_TOKEN: boolean;
+  };
+}

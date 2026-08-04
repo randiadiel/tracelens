@@ -80,6 +80,9 @@ Send `Authorization: Bearer replace-me` to both `/mcp` and `/ingest/:source`.
 
 ## MCP tools
 
+- `tracelens_info` — returns ingest endpoints, storage paths, available sources,
+  tool guide, and recommended workflow. Call first when unsure how to use
+  TraceLens.
 - `list_log_sources` — lists logs pushed into the local store.
 - `ingest_logs` — appends structured logs through MCP.
 - `inspect_logs` — tails a source or file, compresses repeats, detects loops,
