@@ -91,8 +91,10 @@ ready-to-paste instrumentation snippets containing the live ingest URL:
    tagging every log with `metadata.hypothesis` so evidence is searchable and
    cleanup is greppable.
 4. Reproduce the failure so the instrumented code runs.
-5. Read the evidence with `search_logs` (query the hypothesis id),
-   `inspect_logs`, or `analyze_performance`.
+5. Read the evidence with `search_logs`, `inspect_logs`, or
+   `analyze_performance`, passing `hypothesis: "H1"` so only that group's
+   logs enter the model context. Responses include `hypothesesInWindow`
+   (group → line count) so available groups are discoverable.
 6. Fix and re-verify, or form `H2` and repeat.
 7. Remove the instrumentation.
 

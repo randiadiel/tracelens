@@ -27,17 +27,17 @@ const TOOL_GUIDES = [
   {
     name: "inspect_logs",
     summary:
-      "Tail an ingested source or allowed local file. Collapses repeats, detects loops, and enforces a response budget.",
+      "Tail an ingested source or allowed local file. Collapses repeats, detects loops, and enforces a response budget. Accepts hypothesis to return only one hypothesis group.",
   },
   {
     name: "search_logs",
     summary:
-      "Search recent logs and return compact context around the newest matches. Search your hypothesis id to pull only your instrumented evidence.",
+      "Search recent logs and return compact context around the newest matches. Accepts hypothesis to search only within one hypothesis group.",
   },
   {
     name: "analyze_performance",
     summary:
-      "Extract latency and resource metrics, group operations, and rank bottlenecks. Requires an operation name and a timing field in metadata.",
+      "Extract latency and resource metrics, group operations, and rank bottlenecks. Requires an operation name and a timing field in metadata. Accepts hypothesis to analyze only one group.",
   },
 ] as const;
 
@@ -46,13 +46,13 @@ const DEBUGGING_PLAYBOOK = [
   "2. GET ENDPOINTS — Call tracelens_info and copy the exact ingest URL (HTTP mode) or the log-file convention (stdio mode) from the instrumentation section. Never guess the URL or port.",
   "3. INSTRUMENT — Edit the user's code and add log calls at the few points that decide the hypothesis: entry/exit of the suspect function, branch decisions, and the specific variable values involved. Use the snippet from tracelens_info verbatim, substituting message and metadata. Every log must carry metadata.hypothesis (e.g. 'H1') so it can be found and cleaned up later. For performance questions also include an operation name and a duration_ms (or similar) timing field.",
   "4. REPRODUCE — Run the failing scenario, test, or request so the instrumented code actually executes. If nothing runs, no logs will exist.",
-  "5. INSPECT — Call list_log_sources to confirm the source appeared, then search_logs with query set to the hypothesis id (e.g. 'H1') for targeted evidence, inspect_logs to tail the wider context, or analyze_performance for latency/CPU/memory questions.",
+  "5. INSPECT — Call list_log_sources to confirm the source appeared, then pass hypothesis: 'H1' to inspect_logs, search_logs, or analyze_performance so only that hypothesis group's logs enter your context. Responses include hypothesesInWindow (group -> line count) so you can see which groups exist. Use inspect_logs without the filter only when you need surrounding application logs.",
   "6. VERDICT — If the evidence confirms the hypothesis, implement the fix and re-run step 4-5 to verify the logs now show correct behavior. If it refutes it, write H2 and repeat from step 3 with new targeted instrumentation. Do not blindly widen logging; each iteration tests one hypothesis.",
   "7. CLEAN UP — After the fix is verified, remove every instrumentation call you added (search the codebase for 'tracelens' and your hypothesis ids).",
 ] as const;
 
 const INSTRUMENTATION_RULES = [
-  "Tag every instrumented log with metadata.hypothesis (H1, H2, ...) so search_logs can isolate it and cleanup is greppable.",
+  "Tag every instrumented log with metadata.hypothesis (H1, H2, ...): inspection tools accept a hypothesis parameter that returns only that group, and cleanup stays greppable.",
   "Instrument the few lines that decide the hypothesis, not the whole codebase.",
   "Logging must never break the app: fire-and-forget, swallow errors, short timeouts.",
   "Use one kebab-case source name per app or debug session, e.g. 'checkout-service'.",
@@ -63,7 +63,7 @@ const INSTRUMENTATION_RULES = [
 
 export const TRACE_LENS_INSTRUCTIONS = [
   "TraceLens is a context-efficient log debugger for AI agents.",
-  "Debugging loop: (1) state a falsifiable hypothesis about the bug, (2) call tracelens_info to get the exact ingest URL or log-file convention plus ready-to-paste snippets, (3) instrument the suspect code with log calls tagged metadata.hypothesis, (4) run the failing scenario, (5) read the evidence with search_logs/inspect_logs/analyze_performance, (6) fix or form the next hypothesis, (7) remove the instrumentation.",
+  "Debugging loop: (1) state a falsifiable hypothesis about the bug, (2) call tracelens_info to get the exact ingest URL or log-file convention plus ready-to-paste snippets, (3) instrument the suspect code with log calls tagged metadata.hypothesis, (4) run the failing scenario, (5) read the evidence with search_logs/inspect_logs/analyze_performance, passing hypothesis: 'H1' so only that group's logs enter context, (6) fix or form the next hypothesis, (7) remove the instrumentation.",
   "Always call tracelens_info before instrumenting; never guess endpoints.",
   "Use exactly one of source (ingested JSONL) or path (allowed local file) with inspection tools.",
 ].join(" ");

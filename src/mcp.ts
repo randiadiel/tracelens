@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { analyzeLines } from "./analyze.js";
+import { countHypotheses, filterByHypothesis } from "./hypothesis.js";
 import { buildTraceLensInfo, TRACE_LENS_INSTRUCTIONS } from "./info.js";
 import { normalizeLine } from "./normalize.js";
 import { analyzePerformance } from "./performance.js";
@@ -40,6 +41,24 @@ async function readTarget(
   return input.source
     ? store.read(input.source, input.tailLines)
     : readTail(input.path as string, input.tailLines);
+}
+
+function scopeToHypothesis(read: ReadResult, hypothesis?: string) {
+  const counts = countHypotheses(read.lines);
+  const hypothesesInWindow = Object.keys(counts).length > 0 ? counts : undefined;
+  if (!hypothesis) {
+    return { lines: read.lines, hypothesesInWindow, hypothesisFilter: undefined };
+  }
+  const lines = filterByHypothesis(read.lines, hypothesis);
+  return {
+    lines,
+    hypothesesInWindow,
+    hypothesisFilter: {
+      hypothesis,
+      matchedLines: lines.length,
+      linesScanned: read.lines.length,
+    },
+  };
 }
 
 export function createTraceLensServer(
@@ -119,10 +138,11 @@ export function createTraceLensServer(
     {
       title: "Inspect compact logs",
       description:
-        "Read the tail of an ingested source or allowed local file. Collapses repeated lines and trailing cycles, reports likely infinite loops, and enforces a response budget.",
+        "Read the tail of an ingested source or allowed local file. Collapses repeated lines and trailing cycles, reports likely infinite loops, and enforces a response budget. Pass hypothesis (e.g. 'H1') to keep only that hypothesis group's instrumented logs in context.",
       inputSchema: {
         source: z.string().min(1).max(80).optional(),
         path: z.string().min(1).max(4_096).optional(),
+        hypothesis: z.string().min(1).max(80).optional(),
         tailLines: z.number().int().min(10).max(100_000).default(5_000),
         maxChars: z.number().int().min(1_000).max(30_000).default(12_000),
         maxLineChars: z.number().int().min(100).max(2_000).default(600),
@@ -135,7 +155,8 @@ export function createTraceLensServer(
     async (input) => {
       try {
         const read = await readTarget(store, input);
-        const analysis = analyzeLines(read.source, read.lines, {
+        const scoped = scopeToHypothesis(read, input.hypothesis);
+        const analysis = analyzeLines(read.source, scoped.lines, {
           maxChars: input.maxChars,
           maxLineChars: input.maxLineChars,
           minLoopOccurrences: input.minLoopOccurrences,
@@ -144,6 +165,8 @@ export function createTraceLensServer(
         });
         return jsonResult({
           ...analysis,
+          hypothesesInWindow: scoped.hypothesesInWindow,
+          hypothesisFilter: scoped.hypothesisFilter,
           read: {
             totalBytes: read.totalBytes,
             bytesRead: read.bytesRead,
@@ -161,10 +184,11 @@ export function createTraceLensServer(
     {
       title: "Search logs",
       description:
-        "Search recent logs and return compact context around the newest matches. Repeated matching context is collapsed before it reaches the model.",
+        "Search recent logs and return compact context around the newest matches. Repeated matching context is collapsed before it reaches the model. Pass hypothesis (e.g. 'H1') to search only within that hypothesis group's instrumented logs.",
       inputSchema: {
         source: z.string().min(1).max(80).optional(),
         path: z.string().min(1).max(4_096).optional(),
+        hypothesis: z.string().min(1).max(80).optional(),
         query: z.string().min(1).max(1_000),
         regex: z.boolean().default(false),
         caseSensitive: z.boolean().default(false),
@@ -178,12 +202,14 @@ export function createTraceLensServer(
     async (input) => {
       try {
         const read = await readTarget(store, input);
+        const scoped = scopeToHypothesis(read, input.hypothesis);
+        const windowLines = scoped.lines;
         const flags = input.caseSensitive ? "" : "i";
         const expression = input.regex
           ? new RegExp(input.query, flags)
           : undefined;
         const query = input.caseSensitive ? input.query : input.query.toLowerCase();
-        const matches = read.lines
+        const matches = windowLines
           .map((line, index) => ({ line, index }))
           .filter(({ line }) =>
             expression
@@ -195,7 +221,7 @@ export function createTraceLensServer(
         for (const match of selectedMatches) {
           for (
             let index = Math.max(0, match.index - input.contextLines);
-            index <= Math.min(read.lines.length - 1, match.index + input.contextLines);
+            index <= Math.min(windowLines.length - 1, match.index + input.contextLines);
             index += 1
           ) {
             indexes.add(index);
@@ -204,7 +230,7 @@ export function createTraceLensServer(
         const context = [...indexes]
           .sort((a, b) => a - b)
           .flatMap((index) => {
-            const line = read.lines[index];
+            const line = windowLines[index];
             return line ? [line] : [];
           });
         const analysis = analyzeLines(`${read.source} search`, context, {
@@ -212,6 +238,8 @@ export function createTraceLensServer(
         });
         return jsonResult({
           query: input.query,
+          hypothesesInWindow: scoped.hypothesesInWindow,
+          hypothesisFilter: scoped.hypothesisFilter,
           totalMatchesInWindow: matches.length,
           matchesReturned: selectedMatches.length,
           normalizedMatchSignatures: [
@@ -230,10 +258,11 @@ export function createTraceLensServer(
     {
       title: "Analyze performance bottlenecks",
       description:
-        "Extract latency, CPU, memory, and event-loop metrics from recent logs. Groups operations, ranks p95 and total-time bottlenecks, and returns only the slowest outliers.",
+        "Extract latency, CPU, memory, and event-loop metrics from recent logs. Groups operations, ranks p95 and total-time bottlenecks, and returns only the slowest outliers. Pass hypothesis (e.g. 'H1') to analyze only that hypothesis group's instrumented logs.",
       inputSchema: {
         source: z.string().min(1).max(80).optional(),
         path: z.string().min(1).max(4_096).optional(),
+        hypothesis: z.string().min(1).max(80).optional(),
         tailLines: z.number().int().min(10).max(100_000).default(20_000),
         slowThresholdMs: z.number().min(0.01).max(3_600_000).default(500),
         maxOperations: z.number().int().min(1).max(50).default(10),
@@ -245,9 +274,12 @@ export function createTraceLensServer(
     async (input) => {
       try {
         const read = await readTarget(store, input);
-        const analysis = analyzePerformance(read.source, read.lines, input);
+        const scoped = scopeToHypothesis(read, input.hypothesis);
+        const analysis = analyzePerformance(read.source, scoped.lines, input);
         return jsonResult({
           ...analysis,
+          hypothesesInWindow: scoped.hypothesesInWindow,
+          hypothesisFilter: scoped.hypothesisFilter,
           read: {
             totalBytes: read.totalBytes,
             bytesRead: read.bytesRead,
