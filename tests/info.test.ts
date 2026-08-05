@@ -44,6 +44,31 @@ describe("buildTraceLensInfo", () => {
     expect(info.storage.sources).toHaveLength(1);
     expect(info.tools.some((tool) => tool.name === "tracelens_info")).toBe(true);
     expect(info.workflow.length).toBeGreaterThan(0);
+    expect(info.workflow[0]).toContain("HYPOTHESIZE");
+    expect(info.instrumentation.mode).toBe("http");
+    const javascript = info.instrumentation.snippets.find(
+      (snippet) => snippet.language === "javascript",
+    );
+    expect(javascript?.code).toContain("fetch(\"http://127.0.0.1:7331/ingest/");
+    expect(javascript?.code).toContain("hypothesis");
+    expect(javascript?.code).toContain("Bearer <TRACELENS_TOKEN>");
+    expect(info.instrumentation.rules.length).toBeGreaterThan(0);
+  });
+
+  it("omits the auth header from snippets when no token is required", async () => {
+    const directory = await tempDirectory();
+    const store = new LogStore(directory);
+
+    const info = await buildTraceLensInfo(store, {
+      transport: "http",
+      host: "127.0.0.1",
+      port: 7331,
+      authRequired: false,
+    });
+
+    for (const snippet of info.instrumentation.snippets) {
+      expect(snippet.code).not.toContain("TRACELENS_TOKEN");
+    }
   });
 
   it("returns MCP-only ingest guidance in stdio mode", async () => {
@@ -58,5 +83,12 @@ describe("buildTraceLensInfo", () => {
     expect(info.ingest.httpUrlTemplate).toBeNull();
     expect(info.ingest.httpExample).toBeNull();
     expect(info.ingest.mcpTool).toBe("ingest_logs");
+    expect(info.instrumentation.mode).toBe("file");
+    expect(info.instrumentation.howTo).toContain("stdio");
+    expect(
+      info.instrumentation.snippets.every((snippet) =>
+        snippet.code.includes("tracelens-debug.jsonl"),
+      ),
+    ).toBe(true);
   });
 });
