@@ -78,11 +78,32 @@ TRACELENS_TOKEN='replace-me' npm start -- --http --host 0.0.0.0
 
 Send `Authorization: Bearer replace-me` to both `/mcp` and `/ingest/:source`.
 
+## How agents debug with TraceLens
+
+The server teaches agents a hypothesis-driven loop. The MCP server
+instructions summarize it, and `tracelens_info` returns the full playbook plus
+ready-to-paste instrumentation snippets containing the live ingest URL:
+
+1. State one falsifiable hypothesis about the bug (`H1: ...`).
+2. Call `tracelens_info` for the exact ingest URL (HTTP mode) or the
+   JSONL-file convention (stdio mode). Never guess endpoints.
+3. Instrument the suspect code with the returned `fetch`/logging snippet,
+   tagging every log with `metadata.hypothesis` so evidence is searchable and
+   cleanup is greppable.
+4. Reproduce the failure so the instrumented code runs.
+5. Read the evidence with `search_logs` (query the hypothesis id),
+   `inspect_logs`, or `analyze_performance`.
+6. Fix and re-verify, or form `H2` and repeat.
+7. Remove the instrumentation.
+
+In stdio mode there is no HTTP ingest endpoint, so the snippets instead append
+JSON lines to a file under an allowed root, inspected via `path`.
+
 ## MCP tools
 
-- `tracelens_info` — returns ingest endpoints, storage paths, available sources,
-  tool guide, and recommended workflow. Call first when unsure how to use
-  TraceLens.
+- `tracelens_info` — returns the debugging playbook, instrumentation snippets
+  with the live ingest URL, storage paths, available sources, and a tool
+  guide. Call before instrumenting any code.
 - `list_log_sources` — lists logs pushed into the local store.
 - `ingest_logs` — appends structured logs through MCP.
 - `inspect_logs` — tails a source or file, compresses repeats, detects loops,

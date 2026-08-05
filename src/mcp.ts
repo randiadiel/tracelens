@@ -49,7 +49,7 @@ export function createTraceLensServer(
   const server = new McpServer(
     {
       name: "tracelens",
-      version: "0.0.2",
+      version: "0.0.3",
     },
     {
       instructions: TRACE_LENS_INSTRUCTIONS,
@@ -61,7 +61,7 @@ export function createTraceLensServer(
     {
       title: "TraceLens server info",
       description:
-        "How to use TraceLens and where to push logs. Returns ingest endpoints, storage paths, available sources, tool guide, and workflow. Call first when unsure.",
+        "The step-by-step debugging playbook: how to instrument code with TraceLens, exact ingest URLs, ready-to-paste fetch/log snippets, storage paths, and available sources. Call this before instrumenting any code.",
       inputSchema: {},
       annotations: { readOnlyHint: true, idempotentHint: true },
     },

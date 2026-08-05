@@ -68,11 +68,24 @@ export interface TraceLensToolGuide {
   summary: string;
 }
 
+export interface TraceLensSnippet {
+  language: string;
+  code: string;
+}
+
+export interface TraceLensInstrumentation {
+  mode: "http" | "file";
+  howTo: string;
+  snippets: TraceLensSnippet[];
+  rules: string[];
+}
+
 export interface TraceLensServerInfo {
   service: "tracelens";
   version: string;
   transport: "stdio" | "http";
   workflow: string[];
+  instrumentation: TraceLensInstrumentation;
   tools: TraceLensToolGuide[];
   ingest: {
     mcpTool: string;
