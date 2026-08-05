@@ -67,6 +67,12 @@ export interface TraceLensServerContext {
   host?: string;
   port?: number;
   authRequired?: boolean;
+  /**
+   * True when HTTP ingest routes are reachable at host:port while the MCP
+   * transport is stdio — either this process bound the companion listener or
+   * another TraceLens process already serves the port (shared on-disk store).
+   */
+  ingestHttp?: boolean;
 }
 
 export interface TraceLensToolGuide {

@@ -6,7 +6,7 @@ import type {
   TraceLensServerInfo,
 } from "./types.js";
 
-const VERSION = "0.0.3";
+const VERSION = "0.1.0";
 
 const TOOL_GUIDES = [
   {
@@ -22,7 +22,7 @@ const TOOL_GUIDES = [
   {
     name: "ingest_logs",
     summary:
-      "Append structured logs to a named local source through MCP. Prefer HTTP ingest when the server runs in HTTP mode.",
+      "Append structured logs to a named local source through MCP. Prefer the HTTP ingest endpoint whenever the instrumentation section shows one.",
   },
   {
     name: "inspect_logs",
@@ -43,7 +43,7 @@ const TOOL_GUIDES = [
 
 const DEBUGGING_PLAYBOOK = [
   "1. HYPOTHESIZE — Read the failing code and state one falsifiable hypothesis, e.g. 'H1: cart total is wrong because applyDiscount receives a stale price'. Decide exactly what logged value would confirm or refute it. Do not instrument before you can name the hypothesis.",
-  "2. GET ENDPOINTS — Call tracelens_info and copy the exact ingest URL (HTTP mode) or the log-file convention (stdio mode) from the instrumentation section. Never guess the URL or port.",
+  "2. GET ENDPOINTS — Call tracelens_info and copy the exact ingest URL or the log-file convention from the instrumentation section. Never guess the URL or port.",
   "3. INSTRUMENT — Edit the user's code and add log calls at the few points that decide the hypothesis: entry/exit of the suspect function, branch decisions, and the specific variable values involved. Use the snippet from tracelens_info verbatim, substituting message and metadata. Every log must carry metadata.hypothesis (e.g. 'H1') so it can be found and cleaned up later. For performance questions also include an operation name and a duration_ms (or similar) timing field.",
   "4. REPRODUCE — Run the failing scenario, test, or request so the instrumented code actually executes. If nothing runs, no logs will exist.",
   "5. INSPECT — Call list_log_sources to confirm the source appeared, then pass hypothesis: 'H1' to inspect_logs, search_logs, or analyze_performance so only that hypothesis group's logs enter your context. Responses include hypothesesInWindow (group -> line count) so you can see which groups exist. Use inspect_logs without the filter only when you need surrounding application logs.",
@@ -69,7 +69,10 @@ export const TRACE_LENS_INSTRUCTIONS = [
 ].join(" ");
 
 function httpBaseUrl(context: TraceLensServerContext): string | null {
-  if (context.transport !== "http" || !context.host || !context.port) {
+  if (!context.host || !context.port) {
+    return null;
+  }
+  if (context.transport !== "http" && !context.ingestHttp) {
     return null;
   }
   return `http://${context.host}:${context.port}`;
@@ -152,7 +155,7 @@ function buildInstrumentation(
   return {
     mode: "file",
     howTo:
-      `This server runs in stdio mode, so instrumented application code cannot reach an HTTP ingest endpoint. ` +
+      `This server has no HTTP ingest endpoint (stdio mode with the ingest listener disabled or unavailable), so instrumented application code cannot POST logs. ` +
       `Instead, append JSON lines to a log file under an allowed root (see fileInspection.allowedRoots), ` +
       `for example ${logFile}, then inspect it with inspect_logs/search_logs using path. ` +
       `Alternatively push logs yourself with the ingest_logs MCP tool. Remove instrumentation after the fix is verified.`,
@@ -232,7 +235,8 @@ export async function buildTraceLensInfo(
       ],
     },
     endpoints: {
-      mcp: baseUrl ? `${baseUrl}/mcp` : null,
+      // /mcp only exists in http transport; combo mode serves ingest routes only.
+      mcp: context.transport === "http" && baseUrl ? `${baseUrl}/mcp` : null,
       health: baseUrl ? `${baseUrl}/health` : null,
     },
     storage: {
