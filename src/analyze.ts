@@ -1,4 +1,4 @@
-import { clampLine, normalizeLine } from "./normalize.js";
+import { clampLine, normalizeLine, normalizeNumbers } from "./normalize.js";
 import type {
   AnalysisResult,
   CompactEntry,
@@ -219,6 +219,13 @@ function enforceSerializedBudget(
   return result;
 }
 
+function largestRun(runs: Run[]): Run | undefined {
+  return runs.reduce<Run | undefined>(
+    (largest, run) => (!largest || run.count > largest.count ? run : largest),
+    undefined,
+  );
+}
+
 export function analyzeLines(
   source: string,
   lines: NumberedLine[],
@@ -228,15 +235,52 @@ export function analyzeLines(
   const maxLineChars = options.maxLineChars ?? 600;
   const minLoopOccurrences = options.minLoopOccurrences ?? 4;
   const maxPatternLength = options.maxPatternLength ?? 20;
-  const signatures = lines.map((line) =>
-    options.normalize === false ? stripForComparison(line.text) : normalizeLine(line.text),
+  const normalizeEnabled = options.normalize !== false;
+  const baseSignatures = lines.map((line) =>
+    normalizeEnabled ? normalizeLine(line.text) : stripForComparison(line.text),
   );
-  const runs = makeRuns(lines, signatures, maxLineChars);
-  const cycle = findTrailingCycle(
-    signatures,
-    minLoopOccurrences,
-    maxPatternLength,
-  );
+
+  let signatures = baseSignatures;
+  let runs = makeRuns(lines, signatures, maxLineChars);
+  let cycle = findTrailingCycle(signatures, minLoopOccurrences, maxPatternLength);
+  let burst = cycle ? undefined : largestRun(runs);
+  if (burst && burst.count < minLoopOccurrences) {
+    burst = undefined;
+  }
+  let largestRepeatObserved = largestRun(runs)?.count ?? 0;
+  let numericFallback = false;
+
+  // Standard normalization only masks known dynamic keys. Counters with other
+  // names (e.g. {"n":42}) still produce unique signatures, so when nothing was
+  // found, retry once with all numeric literals masked.
+  if (!cycle && !burst && normalizeEnabled) {
+    const numericSignatures = baseSignatures.map(normalizeNumbers);
+    const numericRuns = makeRuns(lines, numericSignatures, maxLineChars);
+    const numericCycle = findTrailingCycle(
+      numericSignatures,
+      minLoopOccurrences,
+      maxPatternLength,
+    );
+    let numericBurst = numericCycle ? undefined : largestRun(numericRuns);
+    if (numericBurst && numericBurst.count < minLoopOccurrences) {
+      numericBurst = undefined;
+    }
+    largestRepeatObserved = Math.max(
+      largestRepeatObserved,
+      largestRun(numericRuns)?.count ?? 0,
+    );
+    if (numericCycle || numericBurst) {
+      signatures = numericSignatures;
+      runs = numericRuns;
+      cycle = numericCycle;
+      burst = numericBurst;
+      numericFallback = true;
+    }
+  }
+
+  const fallbackNote = numericFallback
+    ? " (Found after masking numeric values; rerun with normalizeDynamicValues=false to see raw lines.)"
+    : "";
 
   let loop: LoopFinding = { detected: false };
   let entries: CompactEntry[] = runs.map(runToEntry);
@@ -259,14 +303,18 @@ export function analyzeLines(
       loop = {
         detected: true,
         kind,
-        confidence: cycle.occurrences >= minLoopOccurrences * 2 ? "high" : "medium",
+        confidence:
+          !numericFallback && cycle.occurrences >= minLoopOccurrences * 2
+            ? "high"
+            : "medium",
         occurrences: cycle.occurrences,
         linesCovered: cycleLines.length,
         pattern: rawPattern,
         message:
-          kind === "consecutive"
+          (kind === "consecutive"
             ? `The same normalized log line repeats ${cycle.occurrences} times at the end.`
-            : `A ${cycle.patternLength}-line cycle repeats ${cycle.occurrences} times at the end.`,
+            : `A ${cycle.patternLength}-line cycle repeats ${cycle.occurrences} times at the end.`) +
+          fallbackNote,
         startLine: first.number,
         endLine: last.number,
       };
@@ -280,25 +328,32 @@ export function analyzeLines(
         },
       ];
     }
+  } else if (burst) {
+    loop = {
+      detected: true,
+      kind: "burst",
+      confidence:
+        !numericFallback && burst.count >= minLoopOccurrences * 2
+          ? "high"
+          : "medium",
+      occurrences: burst.count,
+      linesCovered: burst.count,
+      pattern: [burst.sample],
+      message: `A normalized log line repeats ${burst.count} consecutive times.${fallbackNote}`,
+      startLine: burst.fromLine,
+      endLine: burst.toLine,
+    };
   } else {
-    const largestRun = runs.reduce<Run | undefined>(
-      (largest, run) => (!largest || run.count > largest.count ? run : largest),
-      undefined,
-    );
-    if (largestRun && largestRun.count >= minLoopOccurrences) {
-      loop = {
-        detected: true,
-        kind: "burst",
-        confidence:
-          largestRun.count >= minLoopOccurrences * 2 ? "high" : "medium",
-        occurrences: largestRun.count,
-        linesCovered: largestRun.count,
-        pattern: [largestRun.sample],
-        message: `A normalized log line repeats ${largestRun.count} consecutive times.`,
-        startLine: largestRun.fromLine,
-        endLine: largestRun.toLine,
-      };
-    }
+    loop = {
+      detected: false,
+      message:
+        lines.length === 0
+          ? "Loop detection ran but there were no lines to scan."
+          : `Loop detection ran on ${lines.length} lines; the largest consecutive repeat of a normalized line was ${largestRepeatObserved} (threshold: ${minLoopOccurrences}).`,
+      linesScanned: lines.length,
+      minOccurrencesRequired: minLoopOccurrences,
+      largestRepeatObserved,
+    };
   }
 
   const fitted = fitToBudget(entries, maxChars);
