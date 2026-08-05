@@ -59,6 +59,59 @@ describe("analyzeLines", () => {
     expect(result.entries.at(-1)?.kind).toBe("cycle");
   });
 
+  it("collapses ingested lines whose JSON metadata carries a loop counter", () => {
+    const lines = numbered(
+      Array.from(
+        { length: 8 },
+        (_, index) =>
+          `2026-08-05T05:00:00.000Z DEBUG poll tick {"iter":${index + 1}}`,
+      ),
+    );
+
+    const result = analyzeLines("poller", lines);
+
+    expect(result.loop).toMatchObject({
+      detected: true,
+      kind: "consecutive",
+      confidence: "high",
+      occurrences: 8,
+    });
+    expect(result.entries).toHaveLength(1);
+    expect(result.summary.repeatedLinesCollapsed).toBe(7);
+  });
+
+  it("falls back to numeric masking for counters with unknown key names", () => {
+    const lines = numbered(
+      Array.from(
+        { length: 8 },
+        (_, index) =>
+          `2026-08-05T05:00:00.000Z DEBUG worker heartbeat {"n":${index + 1},"queued":0}`,
+      ),
+    );
+
+    const result = analyzeLines("worker", lines);
+
+    expect(result.loop).toMatchObject({
+      detected: true,
+      kind: "consecutive",
+      confidence: "medium",
+      occurrences: 8,
+    });
+    expect(result.loop.message).toContain("masking numeric values");
+    expect(result.entries).toHaveLength(1);
+  });
+
+  it("skips the numeric fallback when normalization is disabled", () => {
+    const lines = numbered(
+      Array.from({ length: 8 }, (_, index) => `poll tick iter=${index + 1}`),
+    );
+
+    const result = analyzeLines("raw", lines, { normalize: false });
+
+    expect(result.loop.detected).toBe(false);
+    expect(result.entries).toHaveLength(8);
+  });
+
   it("keeps ordinary numeric differences distinct", () => {
     const result = analyzeLines(
       "http",
@@ -69,9 +122,29 @@ describe("analyzeLines", () => {
     expect(result.entries).toHaveLength(3);
   });
 
+  it("explains itself when no loop is detected", () => {
+    const result = analyzeLines(
+      "quiet",
+      numbered(["server started", "listening on port 3000", "listening on port 3000"]),
+    );
+
+    expect(result.loop).toMatchObject({
+      detected: false,
+      linesScanned: 3,
+      minOccurrencesRequired: 4,
+      largestRepeatObserved: 2,
+    });
+    expect(result.loop.message).toContain("Loop detection ran on 3 lines");
+  });
+
   it("returns newest entries within the context budget", () => {
+    // Letter-based suffixes keep lines unique even under numeric masking.
     const lines = numbered(
-      Array.from({ length: 100 }, (_, index) => `unique log ${index} ${"x".repeat(80)}`),
+      Array.from(
+        { length: 100 },
+        (_, index) =>
+          `unique log ${index.toString().replace(/\d/g, (d) => "abcdefghij"[Number(d)] ?? "z")} ${"x".repeat(80)}`,
+      ),
     );
 
     const result = analyzeLines("large", lines, {

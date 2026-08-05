@@ -30,6 +30,12 @@ export interface LoopFinding {
   message?: string;
   startLine?: number;
   endLine?: number;
+  /** Present when detected is false: how many lines were checked. */
+  linesScanned?: number;
+  /** Present when detected is false: the occurrence threshold that applied. */
+  minOccurrencesRequired?: number;
+  /** Present when detected is false: closest repeat found below the threshold. */
+  largestRepeatObserved?: number;
 }
 
 export interface CompactEntry {
