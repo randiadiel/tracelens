@@ -47,6 +47,20 @@ Add this server to any MCP client:
 `TRACELENS_ALLOWED_ROOTS` defaults to the process working directory. File reads
 outside these roots, including symlink escapes, are rejected.
 
+### HTTP ingest in stdio mode
+
+The stdio server also opens an HTTP ingest listener on `127.0.0.1:7331` with
+`GET /health` and `POST /ingest/:source` (no `/mcp` route), so instrumented
+application code can push logs while the MCP client talks over stdio. One
+process, one command, both interfaces live. Disable it with `--no-ingest-http`
+or `TRACELENS_INGEST_HTTP=0`; change the address with `--host`/`--port`.
+
+When several stdio processes run at once (for example one per open project),
+they race for the port. The winner serves ingest for everyone; losers log an
+info line to stderr and keep working, because the log store is shared on disk.
+If a losing process confirms the port is held by another TraceLens (via
+`GET /health`), its `tracelens_info` still advertises the shared ingest URL.
+
 ## Run as a shared local HTTP MCP server
 
 HTTP mode lets multiple agents use the same MCP endpoint and lets applications
@@ -98,8 +112,9 @@ ready-to-paste instrumentation snippets containing the live ingest URL:
 6. Fix and re-verify, or form `H2` and repeat.
 7. Remove the instrumentation.
 
-In stdio mode there is no HTTP ingest endpoint, so the snippets instead append
-JSON lines to a file under an allowed root, inspected via `path`.
+When no HTTP ingest endpoint is available (stdio mode with the listener
+disabled or its port taken by a non-TraceLens process), the snippets instead
+append JSON lines to a file under an allowed root, inspected via `path`.
 
 ## MCP tools
 
@@ -165,6 +180,7 @@ returned slow lines and resource peaks give the agent evidence for follow-up.
 | `TRACELENS_ALLOWED_ROOTS` | Comma-separated roots available to file inspection |
 | `TRACELENS_DATA_DIR` | Directory for ingested JSONL logs |
 | `TRACELENS_TOKEN` | Optional localhost HTTP token; required off-loopback |
+| `TRACELENS_INGEST_HTTP` | Set to `0` to disable the stdio-mode HTTP ingest listener |
 
 ## Publishing
 
