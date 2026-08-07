@@ -84,6 +84,11 @@ curl -X POST http://127.0.0.1:7331/ingest/my-api \
 Push a batch with either a JSON array or `{"logs": [...]}`. Ingested logs are
 stored as JSONL under `~/.tracelens/logs` by default.
 
+CORS is wide open (`Access-Control-Allow-Origin: *`), so browser apps can post
+logs directly with `fetch`. The body is parsed as JSON regardless of the
+`Content-Type` header — send `text/plain` (or none at all) to skip the CORS
+preflight entirely.
+
 To listen beyond localhost, a bearer token is mandatory:
 
 ```bash

@@ -135,6 +135,79 @@ describe("startIngestHttpServer", () => {
     expect(authorized.status).toBe(202);
   });
 
+  it("answers CORS preflight with permissive headers and without auth", async () => {
+    const store = new LogStore(await tempDirectory());
+    const { baseUrl } = await startTestServer(store, { token: "secret" });
+
+    const preflight = await fetch(`${baseUrl}/ingest/my-app`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://example.com",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "authorization, content-type",
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
+    expect(preflight.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(preflight.headers.get("access-control-allow-headers")).toBe(
+      "authorization, content-type",
+    );
+  });
+
+  it("sets CORS headers on actual responses", async () => {
+    const store = new LogStore(await tempDirectory());
+    const { baseUrl } = await startTestServer(store);
+
+    const response = await fetch(`${baseUrl}/ingest/my-app`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://example.com" },
+      body: JSON.stringify({ message: "from a browser" }),
+    });
+    expect(response.status).toBe(202);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("ingests JSON bodies sent with preflight-free content types", async () => {
+    const store = new LogStore(await tempDirectory());
+    const { baseUrl } = await startTestServer(store);
+    const payload = JSON.stringify({ message: "simple request" });
+
+    for (const contentType of ["text/plain", "application/x-www-form-urlencoded"]) {
+      const response = await fetch(`${baseUrl}/ingest/my-app`, {
+        method: "POST",
+        headers: { "content-type": contentType },
+        body: payload,
+      });
+      expect(response.status, contentType).toBe(202);
+    }
+
+    // A byte body keeps fetch from adding a content-type header.
+    const noContentType = await fetch(`${baseUrl}/ingest/my-app`, {
+      method: "POST",
+      body: new TextEncoder().encode(payload),
+    });
+    expect(noContentType.status).toBe(202);
+
+    const read = await store.read("my-app", 100);
+    expect(read.lines).toHaveLength(3);
+  });
+
+  it("rejects non-JSON text bodies with a clear error", async () => {
+    const store = new LogStore(await tempDirectory());
+    const { baseUrl } = await startTestServer(store);
+
+    const response = await fetch(`${baseUrl}/ingest/my-app`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: "message=not-json",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Request body must be valid JSON (any content-type is accepted).",
+    });
+  });
+
   it("does not mount the /mcp route", async () => {
     const store = new LogStore(await tempDirectory());
     const { baseUrl } = await startTestServer(store);
