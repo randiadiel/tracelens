@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { Server } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { createTraceLensServer } from "./mcp.js";
@@ -46,6 +47,51 @@ function createAuthMiddleware(token: string | undefined) {
   };
 }
 
+/**
+ * Allows every cross-origin request by default so browser apps can post logs
+ * directly. Echoes the requested headers (the `*` wildcard does not cover
+ * `Authorization` per the CORS spec) and answers preflights before auth runs,
+ * since browsers never attach the bearer token to OPTIONS requests.
+ */
+function permissiveCors(req: Request, res: Response, next: NextFunction): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    req.header("access-control-request-headers") ?? "Authorization, Content-Type",
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
+  res.vary("Access-Control-Request-Headers");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+}
+
+/**
+ * Parses the ingest body as JSON no matter what content type was sent, so
+ * browsers can use preflight-free "simple" requests (text/plain,
+ * application/x-www-form-urlencoded, or no content-type at all).
+ * `express.json()` already handled application/json bodies upstream.
+ */
+function parseBodyAsJson(body: unknown): unknown {
+  if (typeof body !== "string") {
+    return body;
+  }
+  if (!body.trim()) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new Error("Request body must be valid JSON (any content-type is accepted).");
+  }
+}
+
 function requireTokenOffLoopback(host: string, token: string | undefined): void {
   const isLoopback = ["127.0.0.1", "localhost", "::1"].includes(host);
   if (!isLoopback && !token) {
@@ -77,12 +123,17 @@ export interface IngestRouteOptions {
 /** Mounts GET /health and POST /ingest/:source onto an Express app. */
 export function mountIngestRoutes(app: Express, options: IngestRouteOptions): void {
   const authenticate = createAuthMiddleware(options.token);
+  // Reads any non-JSON content type as raw text; skipped when express.json()
+  // already parsed the body.
+  const anyBodyAsText = express.text({ type: () => true });
+
+  app.use(permissiveCors);
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "tracelens" });
   });
 
-  app.post("/ingest/:source", authenticate, async (req, res) => {
+  app.post("/ingest/:source", authenticate, anyBodyAsText, async (req, res) => {
     try {
       const source = Array.isArray(req.params.source)
         ? req.params.source[0]
@@ -90,7 +141,7 @@ export function mountIngestRoutes(app: Express, options: IngestRouteOptions): vo
       if (!source) {
         throw new Error("A source name is required.");
       }
-      const parsed = ingestionSchema.parse(req.body);
+      const parsed = ingestionSchema.parse(parseBodyAsJson(req.body));
       const logs: LogInput[] = Array.isArray(parsed)
         ? parsed
         : "logs" in parsed
